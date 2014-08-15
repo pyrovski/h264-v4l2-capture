@@ -48,7 +48,7 @@ static int fd = -1;
 struct buffer          *buffers;
 static unsigned int n_buffers;
 static int out_buf;
-static int force_format;
+static int force_format = 0;
 static int frame_count = 200;
 static int frame_number = 0;
 
@@ -186,10 +186,12 @@ static int read_frame(void)
 static void mainloop(void)
 {
 	unsigned int count;
+	unsigned int loopIsInfinite = 0;
 
+        if (frame_count == 0) loopIsInfinite = 1; //infinite loop
 	count = frame_count;
 
-	while (count-- > 0) {
+        while ((count-- > 0) || loopIsInfinite) {
 		for (;; ) {
 			fd_set fds;
 			struct timeval tv;
@@ -499,12 +501,20 @@ static void init_device(void)
 	CLEAR(fmt);
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	fprintf(stderr, "Force Format %d\n", force_format);
 	if (force_format) {
-		fprintf(stderr, "Set H264\r\n");
-		fmt.fmt.pix.width       = 640; //replace
-		fmt.fmt.pix.height      = 480; //replace
-		fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_H264; //replace
-		fmt.fmt.pix.field       = V4L2_FIELD_ANY;
+		if (force_format==2){
+             		fmt.fmt.pix.width       = 1920;     
+           		fmt.fmt.pix.height      = 1080;  
+  			fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_H264;
+                	fmt.fmt.pix.field       = V4L2_FIELD_INTERLACED;
+		}
+		else if(force_format==1){
+			fmt.fmt.pix.width	= 640;
+			fmt.fmt.pix.height	= 480;
+			fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+			fmt.fmt.pix.field	= V4L2_FIELD_INTERLACED;
+		}
 
 		if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
 			errno_exit("VIDIOC_S_FMT");
@@ -583,13 +593,16 @@ static void usage(FILE *fp, int argc, char **argv)
 	        "-r | --read          Use read() calls\n"
 	        "-u | --userp         Use application allocated buffers\n"
 	        "-o | --output        Outputs stream to stdout\n"
-	        "-f | --format        Force format to 640x480 H264\n"
-	        "-c | --count         Number of frames to grab [%i]\n"
-	        "",
+                 "-f | --format        Force format to 640x480 YUYV\n"
+		 "-F | --formatH264    Force format to 1920x1080 H264\n"
+                 "-c | --count         Number of frames to grab [%i] - use 0 for infinite\n"
+                 "\n"
+		 "Example usage: capture -F -o -c 300 > output.raw\n"
+		 "Captures 300 frames of H264 at 1920x1080 - use raw2mpg4 script to convert to mpg4\n",
 	        argv[0], dev_name, frame_count);
 }
 
-static const char short_options[] = "d:hmruofc:";
+static const char short_options[] = "d:hmruofFc:";
 
 static const struct option
         long_options[] = {
@@ -600,13 +613,14 @@ static const struct option
 	{ "userp",  no_argument,       NULL, 'u' },
 	{ "output", no_argument,       NULL, 'o' },
 	{ "format", no_argument,       NULL, 'f' },
+	{ "formatH264", no_argument,   NULL, 'F' },
 	{ "count",  required_argument, NULL, 'c' },
 	{ 0, 0, 0, 0 }
 };
 
 int main(int argc, char **argv)
 {
-	dev_name = "/dev/video0";
+	dev_name = "/dev/video1";
 
 	for (;; ) {
 		int idx;
@@ -647,7 +661,11 @@ int main(int argc, char **argv)
 			break;
 
 		case 'f':
-			force_format++;
+			force_format=1;
+			break;
+
+		case 'F':
+			force_format=2;
 			break;
 
 		case 'c':
